@@ -37,7 +37,7 @@ jobs:
           cd plugin
           mvn clean package -DskipTests
           mkdir -p ../dist_release
-          cp target/*.jar ../dist_release/NightSFTP.jar
+          cp target/NightSFTP-1.0.0.jar ../dist_release/NightSFTP.jar
 
       - name: Build Gateway Project
         run: |
