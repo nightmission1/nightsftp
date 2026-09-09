@@ -46,7 +46,7 @@ jobs:
           npm ci
           npm run build
           mkdir -p ../dist_release/gateway
-          cp -r dist package.json package-lock.json config.example.yml Dockerfile README.md ../dist_release/gateway/
+          cp -r dist package.json package-lock.json config.example.yml Dockerfile ../README.md ../dist_release/gateway/
           cd ../dist_release/gateway
           zip -r ../gateway.zip .
           cd ../..
