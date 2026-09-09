@@ -1,0 +1,17 @@
+name: NightSFTP
+version: 1.0.0
+main: com.nightmission.nightsftp.NightSFTP
+api-version: '1.21'
+author: NightMission
+description: Secure Minecraft server remote SFTP file management agent
+
+commands:
+  nightsftp:
+    description: NightSFTP administration command
+    permission: nightsftp.admin
+    usage: /nightsftp [status|reconnect|info]
+
+permissions:
+  nightsftp.admin:
+    description: Grants permission to manage NightSFTP agent connection and status
+    default: op

@@ -1,0 +1,19 @@
+# Derlenmiþ dosyalar ve çýktýlar
+output/
+*.jar
+!plugin/libs/*.jar
+
+# Gateway baðýmlýlýklarý ve derleme çýktýlarý
+gateway/node_modules/
+gateway/dist/
+gateway/.env
+
+# Hassas konfigürasyon dosyalarý (gerçek þifreler)
+gateway/config.yml
+plugin/src/main/resources/config.yml
+
+# Ýþletim sistemi ve IDE çöpleri
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,29 @@
+# NightSFTP Gateway Configuration Example
+# Rename this file to config.yml before starting the server.
+
+sftp:
+  host: "0.0.0.0"
+  port: 25628
+
+agent:
+  host: "0.0.0.0"
+  port: 25628
+  tls: false
+
+security:
+  max-connections: 100
+  rate-limit: 100
+
+transfer:
+  chunk-size: 65536
+  timeout-ms: 30000
+
+logging:
+  level: "info"
+
+# Register valid agents and their authentication credentials
+agents:
+  server-001:
+    token: "YOUR_SECURE_AGENT_TOKEN_HERE"
+    sftp-username: "server-001"
+    sftp-password: "YOUR_SFTP_PASSWORD_HERE"

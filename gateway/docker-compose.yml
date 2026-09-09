@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nightsftp-gateway
+    restart: unless-stopped
+    ports:
+      - "${PORT:-25628}:${PORT:-25628}"
+    environment:
+      - GATEWAY_PORT=${PORT:-25628}
+      - NODE_ENV=production
+    volumes:
+      - ./config.yml:/app/config.yml

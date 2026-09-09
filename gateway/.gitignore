@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+
+# Environment files
+.env
+.env.local
+
+# Configuration files (contains sensitive tokens/passwords)
+config.yml

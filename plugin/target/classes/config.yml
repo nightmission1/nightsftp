@@ -1,0 +1,21 @@
+# NightSFTP Plugin Configuration
+
+gateway:
+  # Host address of the NightSFTP Gateway
+  host: "127.0.0.1"
+  # Agent tunnel port on the Gateway (matches gateway agent.port)
+  port: 8443
+  # Set to true if Gateway uses TLS/SSL (wss://)
+  tls: false
+  # Unique agent ID assigned to this server
+  agent-id: "server-001"
+  # Authentication token matching gateway authorization secret
+  token: "CHANGE_ME_AGENT_TOKEN_123"
+
+connection:
+  # Automatically attempt reconnection on disconnect
+  reconnect: true
+  # Delay between reconnect attempts in milliseconds
+  reconnect-delay-ms: 5000
+  # Transfer chunk size in bytes (default: 64KB)
+  chunk-size: 65536
