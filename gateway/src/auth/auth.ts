@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 export interface AgentCredentials {
   token: string;
   sftpUsername: string;
@@ -32,9 +34,17 @@ export class AuthManager {
     }
 
     const expectedToken = creds.token ? String(creds.token).trim() : '';
-    const isMatch = expectedToken === cleanToken;
+    const expectedBuf = Buffer.from(expectedToken);
+    const actualBuf = Buffer.from(cleanToken);
+
+    if (expectedBuf.length !== actualBuf.length) {
+      console.warn(`[Gateway] Token length mismatch for agent "${cleanAgentId}".`);
+      return false;
+    }
+
+    const isMatch = crypto.timingSafeEqual(expectedBuf, actualBuf);
     if (!isMatch) {
-      console.warn(`[Gateway] Token mismatch for agent "${cleanAgentId}". Expected "${expectedToken}", got "${cleanToken}".`);
+      console.warn(`[Gateway] Token mismatch for agent "${cleanAgentId}".`);
     }
     return isMatch;
   }

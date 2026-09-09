@@ -8,13 +8,14 @@ export interface AuthMessage extends BaseMessage {
   agentId: string;
   token: string;
   version?: string;
+  capabilities?: string[];
 }
 
 export interface RequestMessage extends BaseMessage {
   type: 'request';
   requestId: string;
-  operation: 'list' | 'stat' | 'read' | 'write' | 'mkdir' | 'rmdir' | 'delete' | 'rename';
-  path: string;
+  operation: 'list' | 'stat' | 'read' | 'write' | 'mkdir' | 'rmdir' | 'delete' | 'rename' | 'get_disk_space';
+  path?: string;
   targetPath?: string;
   offset?: number;
   length?: number;

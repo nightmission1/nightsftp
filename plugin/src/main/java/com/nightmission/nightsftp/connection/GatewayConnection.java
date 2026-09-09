@@ -144,6 +144,9 @@ public class GatewayConnection {
                 case "write" -> transferService.writeChunk(reqId, req.getPath(), req.getOffset(), req.getData())
                         .thenAccept(res -> send(ProtocolHandler.serialize(res)));
 
+                case "get_disk_space" -> fileService.getDiskSpace(reqId)
+                        .thenAccept(res -> send(ProtocolHandler.serialize(res)));
+
                 default -> send(ProtocolHandler.serialize(Response.fail(reqId, "INVALID_OPERATION")));
             }
         }

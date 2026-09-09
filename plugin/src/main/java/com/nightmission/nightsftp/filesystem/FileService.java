@@ -27,6 +27,14 @@ public class FileService {
 
     public void shutdown() {
         ioExecutor.shutdown();
+        try {
+            if (!ioExecutor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                ioExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            ioExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public CompletableFuture<Response> listDirectory(String requestId, String path) {
@@ -188,6 +196,20 @@ public class FileService {
             } catch (IOException e) {
                 return Response.fail(requestId, "IO_ERROR");
             }
+        }, ioExecutor);
+    }
+
+    public CompletableFuture<Response> getDiskSpace(String requestId) {
+        return CompletableFuture.supplyAsync(() -> {
+            File rootFile = resolver.getRootPath().toFile();
+            long totalBytes = rootFile.getTotalSpace();
+            long usableBytes = rootFile.getUsableSpace();
+
+            Map<String, Object> map = new HashMap<>();
+            map.put("totalBytes", totalBytes);
+            map.put("usableBytes", usableBytes);
+
+            return Response.ok(requestId, map);
         }, ioExecutor);
     }
 }

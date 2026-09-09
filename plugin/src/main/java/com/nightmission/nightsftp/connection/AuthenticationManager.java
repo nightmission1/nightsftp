@@ -16,7 +16,11 @@ public class AuthenticationManager {
         json.addProperty("type", "auth");
         json.addProperty("agentId", config.getAgentId());
         json.addProperty("token", config.getToken());
-        json.addProperty("version", "1.0.0");
+        json.addProperty("version", "2.0.0");
+        
+        com.google.gson.JsonArray caps = new com.google.gson.JsonArray();
+        caps.add("STATVFS");
+        json.add("capabilities", caps);
         return json.toString();
     }
 }

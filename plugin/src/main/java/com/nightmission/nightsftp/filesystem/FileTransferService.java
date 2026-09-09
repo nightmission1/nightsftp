@@ -12,13 +12,17 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class FileTransferService {
 
+    private static final int MAX_BASE64_LENGTH = 16 * 1024 * 1024; // 16 MB limit
     private final SafePathResolver resolver;
     private final ExecutorService transferExecutor;
+    private final ConcurrentHashMap<String, ReentrantLock> fileLocks = new ConcurrentHashMap<>();
 
     public FileTransferService(SafePathResolver resolver) {
         this.resolver = resolver;
@@ -31,6 +35,18 @@ public class FileTransferService {
 
     public void shutdown() {
         transferExecutor.shutdown();
+        try {
+            if (!transferExecutor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                transferExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            transferExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private ReentrantLock getLockForPath(Path path) {
+        return fileLocks.computeIfAbsent(path.toAbsolutePath().normalize().toString(), p -> new ReentrantLock());
     }
 
     /**
@@ -51,6 +67,8 @@ public class FileTransferService {
                 return Response.fail(requestId, "IS_DIRECTORY");
             }
 
+            ReentrantLock lock = getLockForPath(target);
+            lock.lock();
             try (FileChannel channel = FileChannel.open(target, StandardOpenOption.READ)) {
                 long fileSize = channel.size();
                 if (offset >= fileSize) {
@@ -79,6 +97,8 @@ public class FileTransferService {
                 return Response.ok(requestId, data);
             } catch (Exception e) {
                 return Response.fail(requestId, "IO_ERROR");
+            } finally {
+                lock.unlock();
             }
         }, transferExecutor);
     }
@@ -88,6 +108,10 @@ public class FileTransferService {
      */
     public CompletableFuture<Response> writeChunk(String requestId, String path, long offset, String base64Data) {
         return CompletableFuture.supplyAsync(() -> {
+            if (base64Data != null && base64Data.length() > MAX_BASE64_LENGTH) {
+                return Response.fail(requestId, "PAYLOAD_TOO_LARGE");
+            }
+
             SafePathResolver.PathResult result = resolver.resolvePath(path);
             if (!result.isOk()) {
                 return Response.fail(requestId, result.getStatus().name());
@@ -98,6 +122,8 @@ public class FileTransferService {
                 return Response.fail(requestId, "IS_DIRECTORY");
             }
 
+            ReentrantLock lock = getLockForPath(target);
+            lock.lock();
             try {
                 // Ensure parent directories exist
                 Path parent = target.getParent();
@@ -123,7 +149,10 @@ public class FileTransferService {
 
             } catch (Exception e) {
                 return Response.fail(requestId, "IO_ERROR");
+            } finally {
+                lock.unlock();
             }
         }, transferExecutor);
     }
 }
+

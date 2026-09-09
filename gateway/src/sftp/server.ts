@@ -1,7 +1,9 @@
 import { Server, ClientChannel } from 'ssh2';
 import { generateKeyPairSync } from 'crypto';
-import { AuthManager } from '../auth/auth.js';
+import { GatewayDatabase } from '../db/database.js';
+import { PermissionManager } from '../security/permissions.js';
 import { AgentRegistry } from '../agents/registry.js';
+import { AuditLogger } from '../logging/audit.js';
 import { SftpSessionHandler } from './session.js';
 
 export class SftpServer {
@@ -9,36 +11,43 @@ export class SftpServer {
   private host: string;
   private port: number;
 
-  constructor(host: string, port: number, authManager: AuthManager, agentRegistry: AgentRegistry) {
+  constructor(
+    host: string,
+    port: number,
+    db: GatewayDatabase,
+    permManager: PermissionManager,
+    agentRegistry: AgentRegistry,
+    auditLogger: AuditLogger
+  ) {
     this.host = host;
     this.port = port;
 
-    // Generate a temporary host RSA key pair for SFTP SSH authentication (pkcs1 format required by ssh2)
+    // Generate a temporary host RSA key pair for SFTP SSH authentication
     const { privateKey } = generateKeyPairSync('rsa', {
       modulusLength: 2048,
       publicKeyEncoding: { type: 'spki', format: 'pem' },
       privateKeyEncoding: { type: 'pkcs1', format: 'pem' },
     });
 
-
-    this.server = new Server({ hostKeys: [privateKey] }, (client) => {
-      let targetAgentId: string | null = null;
+    this.server = new Server({ hostKeys: [privateKey] }, (client, info) => {
+      let authenticatedUser: string | null = null;
+      const clientIp = info?.ip || '127.0.0.1';
 
       client.on('authentication', (ctx) => {
         if (ctx.method === 'password') {
-          const agentId = authManager.validateSftpUser(ctx.username, ctx.password);
-          if (agentId) {
-            targetAgentId = agentId;
-            return ctx.accept();
-          }
-        } else if (ctx.method === 'none') {
-          const agentId = authManager.validateSftpUser(ctx.username);
-          if (agentId) {
-            targetAgentId = agentId;
+          if (db.validateUserPassword(ctx.username, ctx.password)) {
+            authenticatedUser = ctx.username;
+            auditLogger.log({
+              timestamp: new Date().toISOString(),
+              username: ctx.username,
+              ip: clientIp,
+              action: 'LOGIN',
+              details: 'Password authentication successful',
+            });
             return ctx.accept();
           }
         }
-        return ctx.reject(['password', 'none']);
+        return ctx.reject(['password']);
       });
 
       client.on('ready', () => {
@@ -46,25 +55,35 @@ export class SftpServer {
           const session = accept();
           session.on('sftp', (acceptSftp) => {
             const sftpStream = acceptSftp();
-            if (!targetAgentId) {
+            if (!authenticatedUser) {
               sftpStream.end();
               return;
             }
 
-            const agentConn = agentRegistry.getAgent(targetAgentId);
-            if (!agentConn) {
-              console.log(`[Gateway] SFTP request rejected. Agent ${targetAgentId} is offline.`);
-              sftpStream.end();
-              return;
-            }
-
-            new SftpSessionHandler(agentConn, sftpStream);
+            new SftpSessionHandler(
+              agentRegistry,
+              permManager,
+              auditLogger,
+              { username: authenticatedUser, clientIp },
+              sftpStream
+            );
           });
         });
       });
 
-      client.on('error', (err) => {
-        // Ignore connection aborts
+      client.on('end', () => {
+        if (authenticatedUser) {
+          auditLogger.log({
+            timestamp: new Date().toISOString(),
+            username: authenticatedUser,
+            ip: clientIp,
+            action: 'DISCONNECT',
+          });
+        }
+      });
+
+      client.on('error', () => {
+        // Suppress connection reset errors
       });
     });
   }
@@ -72,7 +91,8 @@ export class SftpServer {
   public listen(): Promise<void> {
     return new Promise((resolve) => {
       this.server.listen(this.port, this.host, () => {
-        console.log(`[Gateway] SFTP server listening on ${this.host}:${this.port}`);
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [INFO] [SFTP] SFTP server listening on ${this.host}:${this.port}`);
         resolve();
       });
     });
@@ -90,4 +110,3 @@ export class SftpServer {
     this.server.close();
   }
 }
-

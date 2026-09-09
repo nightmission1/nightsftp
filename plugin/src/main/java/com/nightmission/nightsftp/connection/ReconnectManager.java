@@ -52,7 +52,7 @@ public class ReconnectManager {
             logger.info("[NightSFTP] Connection lost. Reconnecting in " + (config.getReconnectDelayMs() / 1000L) + "s...");
 
             cancelReconnectTask();
-            reconnectTask = plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            reconnectTask = plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
                 isReconnecting.set(false);
                 setState(ConnectionState.CONNECTING);
                 connectAction.run();

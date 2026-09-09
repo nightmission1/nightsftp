@@ -5,42 +5,52 @@ import YAML from 'yaml';
 import net from 'net';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { AuthManager } from './auth/auth.js';
+import { GatewayDatabase } from './db/database.js';
+import { PermissionManager } from './security/permissions.js';
 import { AgentRegistry } from './agents/registry.js';
 import { AgentConnection } from './agents/connection.js';
 import { SftpServer } from './sftp/server.js';
+import { AuditLogger } from './logging/audit.js';
+import { InteractiveCLI } from './cli/terminal.js';
 import { parseMessage, serializeMessage, AuthMessage } from './protocol/protocol.js';
+import { loadOrGenerateConfig } from './config.js';
+
+function formatLog(level: 'INFO' | 'WARN' | 'ERROR', component: string, message: string): string {
+  return `[${new Date().toISOString()}] [${level}] [${component}] ${message}`;
+}
 
 async function bootstrap() {
-  const configPath = path.resolve(process.cwd(), 'config.yml');
-  let config: any = {};
-
-  if (fs.existsSync(configPath)) {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    config = YAML.parse(raw);
-  } else {
-    console.warn('[Gateway] config.yml not found, using default configuration.');
-  }
+  const config = loadOrGenerateConfig();
 
   const sftpHost = config.sftp?.host || '0.0.0.0';
-  const sftpPort = Number(process.env.GATEWAY_PORT || process.env.PORT || config.sftp?.port || 25628);
-  const agentHost = config.agent?.host || '0.0.0.0';
-  const agentPort = Number(config.agent?.port) || sftpPort;
+  const sftpPort = Number(process.env.SFTP_PORT || process.env.GATEWAY_PORT || config.sftp?.port || 2222);
+  const agentHost = (config as any).tunnel?.host || (config as any).agent?.host || '0.0.0.0';
+  const agentPort = Number(process.env.AGENT_PORT || (config as any).tunnel?.port || (config as any).agent?.port || 8080);
 
-  const authManager = new AuthManager();
-  authManager.loadFromConfig(config.agents);
-
+  // Initialize DB, Security, Audit Logger, Agent Registry
+  const db = new GatewayDatabase();
+  const permManager = new PermissionManager(db);
+  const auditLogger = new AuditLogger();
   const agentRegistry = new AgentRegistry();
 
-  const isSinglePort = (sftpPort === agentPort && sftpHost === agentHost);
+  // Default admin fallback if DB is empty
+  if (db.getUsers().length === 0) {
+    db.addUser('admin', 'admin123');
+    const agents = db.getAgents();
+    for (const a of agents) {
+      db.grantPermission('admin', a.server_id, '/', 'ALL');
+    }
+    permManager.reloadCache();
+  }
 
-  let wss: WebSocketServer;
+  const isSinglePort = sftpPort === agentPort && sftpHost === agentHost;
+
   const httpServer = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('NightSFTP Gateway Running');
+    res.end('NightSFTP Gateway Server');
   });
 
-  wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on('upgrade', (request, socket, head) => {
     wss.handleUpgrade(request, socket, head, (ws) => {
@@ -58,25 +68,39 @@ async function bootstrap() {
 
       if (msg.type === 'auth') {
         const authMsg = msg as AuthMessage;
-        if (authManager.validateAgentToken(authMsg.agentId, authMsg.token)) {
-          currentConnection = new AgentConnection(authMsg.agentId, ws);
+        const secretKey = authMsg.token;
+
+        if (db.validateAgentSecret(authMsg.agentId, secretKey)) {
+          const capabilities = Array.isArray(authMsg.capabilities) ? authMsg.capabilities : [];
+          currentConnection = new AgentConnection(authMsg.agentId, ws, capabilities);
           agentRegistry.registerAgent(currentConnection);
 
-          console.log(`[Gateway] Agent authenticated successfully: ${authMsg.agentId}`);
-          ws.send(serializeMessage({
-            type: 'auth_response',
-            requestId: authMsg.requestId,
-            success: true,
-            error: 'OK',
-          }));
+          console.log(
+            formatLog(
+              'INFO',
+              'AgentTunnel',
+              `Agent authenticated successfully: ${authMsg.agentId} (Capabilities: [${capabilities.join(', ')}])`
+            )
+          );
+
+          ws.send(
+            serializeMessage({
+              type: 'auth_response',
+              requestId: authMsg.requestId,
+              success: true,
+              error: 'OK',
+            })
+          );
         } else {
-          console.warn(`[Gateway] Authentication failed for agent: ${authMsg.agentId}`);
-          ws.send(serializeMessage({
-            type: 'auth_response',
-            requestId: authMsg.requestId,
-            success: false,
-            error: 'AUTH_FAILED',
-          }));
+          console.warn(formatLog('WARN', 'AgentTunnel', `Authentication failed for agent: ${authMsg.agentId}`));
+          ws.send(
+            serializeMessage({
+              type: 'auth_response',
+              requestId: authMsg.requestId,
+              success: false,
+              error: 'AUTH_FAILED',
+            })
+          );
           ws.close();
         }
         return;
@@ -89,26 +113,21 @@ async function bootstrap() {
 
     ws.on('close', () => {
       if (currentConnection) {
-        console.log(`[Gateway] Agent disconnected: ${currentConnection.agentId}`);
+        console.log(formatLog('INFO', 'AgentTunnel', `Agent session terminated: ${currentConnection.agentId}`));
         agentRegistry.unregisterAgent(currentConnection.agentId);
       }
     });
   });
 
   if (isSinglePort) {
-    console.log(`[Gateway] Single-port loopback mode active on port ${sftpPort}...`);
-
     const internalSftpPort = 25599;
     const internalAgentPort = 25598;
 
-    // Start real SFTP server on internal loopback port
-    const sftpServer = new SftpServer('127.0.0.1', internalSftpPort, authManager, agentRegistry);
+    const sftpServer = new SftpServer('127.0.0.1', internalSftpPort, db, permManager, agentRegistry, auditLogger);
     await sftpServer.listen();
 
-    // Start real HTTP/WS server on internal loopback port
     httpServer.listen(internalAgentPort, '127.0.0.1');
 
-    // Single public port demuxer
     const demuxServer = net.createServer((socket) => {
       let dataReceived = false;
 
@@ -125,7 +144,6 @@ async function bootstrap() {
         socket.on('error', () => proxySocket.destroy());
       };
 
-      // If no HTTP data within 40ms -> forward to SFTP SSH server
       const timer = setTimeout(() => {
         if (!dataReceived) {
           socket.removeAllListeners('data');
@@ -147,22 +165,48 @@ async function bootstrap() {
     });
 
     demuxServer.listen(sftpPort, sftpHost, () => {
-      console.log(`[Gateway] Single-port demuxer listening on ${sftpHost}:${sftpPort}`);
-      console.log(`[Gateway] SFTP (WinSCP) & Agent Tunnel (Minecraft) are BOTH active on port ${sftpPort}!`);
+      console.log(formatLog('INFO', 'Gateway', `Single-port multiplexer listening on ${sftpHost}:${sftpPort}`));
     });
-
   } else {
     // Separate ports mode
-    const sftpServer = new SftpServer(sftpHost, sftpPort, authManager, agentRegistry);
+    const sftpServer = new SftpServer(sftpHost, sftpPort, db, permManager, agentRegistry, auditLogger);
     await sftpServer.listen();
     httpServer.listen(agentPort, agentHost, () => {
-      console.log(`[Gateway] Agent tunnel listening on ${agentHost}:${agentPort}`);
+      console.log(formatLog('INFO', 'Tunnel', `Agent WebSocket tunnel listening on ${agentHost}:${agentPort}`));
     });
   }
 
-  console.log('[Gateway] NightSFTP Gateway running smoothly.');
+  console.log(formatLog('INFO', 'Gateway', 'NightSFTP Gateway service initialization complete.'));
+
+  // Start Interactive Terminal CLI AFTER service startup logs complete
+  const cli = new InteractiveCLI(db, permManager, agentRegistry);
+  cli.start();
+
+  // Keep event loop active continuously even when stdin is closed or connections end
+  if (process.stdin) {
+    process.stdin.resume();
+  }
+  const keepAliveTimer = setInterval(() => {}, 1000 * 60 * 60);
+
+  // Graceful shutdown listeners
+  let isShuttingDown = false;
+  const shutdown = () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.log(formatLog('INFO', 'Gateway', 'Shutdown signal received. Terminating services and releasing resources...'));
+    clearInterval(keepAliveTimer);
+    try {
+      db.close();
+    } catch (_) {}
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 bootstrap().catch((err) => {
-  console.error('[Gateway] Fatal startup error:', err);
+  console.error(formatLog('ERROR', 'Gateway', `Fatal startup error: ${err.message || err}`));
+  process.exit(1);
 });
+

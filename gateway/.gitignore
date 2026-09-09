@@ -1,3 +1,24 @@
+# Logs
+logs/
+*.log
+*.log.gz
+
+# Database and runtime data
+data/
+*.db
+*.db-journal
+
+# Secrets and keys
+*.pem
+*.key
+*.pub
+
+# Temporary scratch & test artifacts
+scratch/
+test/
+*.tmp
+e2e_test_runner.*
+
 # Dependencies
 node_modules/
 

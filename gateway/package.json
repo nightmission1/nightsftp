@@ -9,6 +9,10 @@
     "dev": "ts-node src/index.ts"
   },
   "dependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "bcrypt": "^6.0.0",
+    "better-sqlite3": "^13.0.3",
     "dotenv": "^16.4.5",
     "ssh2": "^1.15.0",
     "ws": "^8.16.0",

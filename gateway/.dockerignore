@@ -1,0 +1,29 @@
+# Node modules & build cache
+node_modules
+npm-debug.log
+
+# Build outputs
+dist
+
+# Runtime data & logs
+data
+logs
+*.db
+*.log
+*.log.gz
+
+# Secrets and keys
+*.pem
+*.key
+*.pub
+config.yml
+.env
+.env.local
+
+# Test runners and temporary files
+scratch
+src/e2e_test_runner.ts
+src/test_*.ts
+src/test_*.js
+verify_db.js
+check_native.js

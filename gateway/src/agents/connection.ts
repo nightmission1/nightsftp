@@ -3,12 +3,41 @@ import { ResponseMessage, serializeMessage } from '../protocol/protocol.js';
 
 export class AgentConnection {
   public readonly agentId: string;
+  public readonly capabilities: Set<string>;
   private socket: WebSocket;
   private pendingRequests: Map<string, { resolve: (res: ResponseMessage) => void; reject: (err: any) => void; timeout: NodeJS.Timeout }> = new Map();
 
-  constructor(agentId: string, socket: WebSocket) {
+  constructor(agentId: string, socket: WebSocket, capabilities: string[] = []) {
     this.agentId = agentId;
     this.socket = socket;
+    this.capabilities = new Set(capabilities.map((c) => c.toUpperCase()));
+  }
+
+  public hasCapability(cap: string): boolean {
+    return this.capabilities.has(cap.toUpperCase());
+  }
+
+  public async getDiskSpace(): Promise<{ totalBytes: number; usableBytes: number }> {
+    if (!this.hasCapability('STATVFS')) {
+      // Legacy v1 agent fallback quota: 100 GB total, 80 GB usable
+      return {
+        totalBytes: 100 * 1024 * 1024 * 1024,
+        usableBytes: 80 * 1024 * 1024 * 1024,
+      };
+    }
+
+    const res = await this.sendRequest('get_disk_space', '/');
+    if (res.success && res.data) {
+      return {
+        totalBytes: Number(res.data.totalBytes) || 0,
+        usableBytes: Number(res.data.usableBytes) || 0,
+      };
+    }
+
+    return {
+      totalBytes: 100 * 1024 * 1024 * 1024,
+      usableBytes: 80 * 1024 * 1024 * 1024,
+    };
   }
 
   public handleIncomingMessage(msg: ResponseMessage): void {

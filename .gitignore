@@ -1,18 +1,32 @@
-# Derlenmiþ dosyalar ve çýktýlar
+# Compiled outputs and build artifacts
 output/
+target/
+plugin/target/
 *.jar
 !plugin/libs/*.jar
 
-# Gateway baðýmlýlýklarý ve derleme çýktýlarý
+# Gateway dependencies, data and logs
 gateway/node_modules/
 gateway/dist/
+gateway/data/
+gateway/logs/
+gateway/*.db
+gateway/*.log
+gateway/*.log.gz
 gateway/.env
+gateway/.env.local
 
-# Hassas konfigürasyon dosyalarý (gerçek þifreler)
+# Sensitive configuration files (passwords/tokens)
 gateway/config.yml
 plugin/src/main/resources/config.yml
 
-# Ýþletim sistemi ve IDE çöpleri
+# Temporary & scratch files
+scratch/
+test/
+*.tmp
+*.bak
+
+# IDE & OS files
 .vscode/
 .idea/
 Thumbs.db
