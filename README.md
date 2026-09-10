@@ -46,7 +46,7 @@ Normal SFTP sistemlerinin aksine Minecraft sunucusunda dışarıya port açılma
 
 ## ✨ 2. Öne Çıkan Özellikler
 
-* 🛡️ **Sıfır Inbound Port (Zero Port Requirement):** Minecraft sunucularınızda dışarıya port açılmasına gerek yoktur. Pterodactyl, Aternos, Batihost, Rabisu vb. tüm ortamlarda çalışır.
+* 🛡️ **Sıfır Inbound Port (Zero Port Requirement):** Minecraft sunucularınızda dışarıya port açılmasına gerek yoktur. Pterodactyl, Batihost, Rabisu vb. tüm ortamlarda çalışır.
 * 👥 **Dinamik Çoklu Kullanıcı & SQLite Veritabanı:** Kullanıcılar, şifreler (scrypt hashli) ve sunucu bazlı yetkiler tamamen SQLite veritabanında saklanır. Config dosyasında kullanıcı/şifre bulunmaz!
 * 🔑 **İnteraktif CLI Terminali:** Gateway çalışırken canlı konsol üzerinden `adduser`, `setpassword`, `setagenttoken`, `grant`, `revoke`, `users`, `agents` komutlarıyla anında yönetim.
 * 📂 **Klasör ve İşlem Bazlı İzin Yönetimi (RBAC):** Kullanıcılara belirli sunucularda yalnızca belirli dizinler için yetki verebilirsiniz (`READ`, `WRITE`, `DELETE`, `EXECUTE`, `ALL`).
